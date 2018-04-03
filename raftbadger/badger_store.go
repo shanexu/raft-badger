@@ -8,6 +8,8 @@ import (
 )
 
 var (
+	dbLogs         = []byte("logs")
+	dbConf         = []byte("conf")
 	ErrKeyNotFound = errors.New("not found")
 )
 
@@ -46,12 +48,15 @@ func New(opts badger.Options) (*BadgerStore, error) {
 func (b *BadgerStore) FirstIndex() (uint64, error) {
 	tx := b.conn.NewTransaction(false)
 	defer tx.Discard()
-	it := tx.NewIterator(badger.DefaultIteratorOptions)
+	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = false
+	it := tx.NewIterator(opts)
 	defer it.Close()
-	for it.Rewind(); it.Valid(); it.Next() {
+	prefix := dbLogs
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 		item := it.Item()
 		k := item.Key()
-		return bytesToUint64(k), nil
+		return bytesToUint64(k[len(prefix):]), nil
 	}
 	return 0, nil
 }
@@ -60,13 +65,15 @@ func (b *BadgerStore) LastIndex() (uint64, error) {
 	tx := b.conn.NewTransaction(false)
 	defer tx.Discard()
 	opts := badger.DefaultIteratorOptions
+	opts.PrefetchValues = false
 	opts.Reverse = true
 	it := tx.NewIterator(opts)
 	defer it.Close()
-	for it.Rewind(); it.Valid(); it.Next() {
+	prefix := dbLogs
+	for it.Rewind(); it.ValidForPrefix(prefix); it.Next() {
 		item := it.Item()
 		k := item.Key()
-		return bytesToUint64(k), nil
+		return bytesToUint64(k[len(prefix):]), nil
 	}
 	return 0, nil
 }
@@ -74,8 +81,8 @@ func (b *BadgerStore) LastIndex() (uint64, error) {
 func (b *BadgerStore) GetLog(idx uint64, log *raft.Log) error {
 	tx := b.conn.NewTransaction(false)
 	defer tx.Discard()
-
-	item, err := tx.Get(uint64ToBytes(idx))
+	prefix := dbLogs
+	item, err := tx.Get(append(prefix[:], uint64ToBytes(idx)...))
 
 	if err == badger.ErrKeyNotFound {
 		return raft.ErrLogNotFound
@@ -100,9 +107,9 @@ func (b *BadgerStore) StoreLog(log *raft.Log) error {
 func (b *BadgerStore) StoreLogs(logs []*raft.Log) error {
 	tx := b.conn.NewTransaction(true)
 	defer tx.Discard()
-
+	prefix := dbLogs
 	for _, log := range logs {
-		key := uint64ToBytes(log.Index)
+		key := append(prefix[:], uint64ToBytes(log.Index)...)
 		val, err := encodeMsgPack(log)
 		if err != nil {
 			return err
@@ -116,17 +123,19 @@ func (b *BadgerStore) StoreLogs(logs []*raft.Log) error {
 }
 
 func (b *BadgerStore) DeleteRange(min, max uint64) error {
-	minKey := uint64ToBytes(min)
+	prefix := dbLogs
+	minKey := append(prefix[:], uint64ToBytes(min)...)
 
 	tx := b.conn.NewTransaction(true)
 	defer tx.Discard()
 
 	it := tx.NewIterator(badger.DefaultIteratorOptions)
 	defer it.Close()
-	for it.Seek(minKey); it.Valid(); it.Next() {
+
+	for it.Seek(minKey); it.ValidForPrefix(prefix); it.Next() {
 		item := it.Item()
 		k := item.Key()
-		if bytesToUint64(k) > max {
+		if bytesToUint64(k[len(prefix):]) > max {
 			break
 		}
 
@@ -141,8 +150,8 @@ func (b *BadgerStore) DeleteRange(min, max uint64) error {
 func (b *BadgerStore) Set(k []byte, v []byte) error {
 	tx := b.conn.NewTransaction(true)
 	defer tx.Discard()
-
-	if err := tx.Set(k, v); err != nil {
+	prefix := dbConf
+	if err := tx.Set(append(prefix[:], k...), v); err != nil {
 		return err
 	}
 
@@ -152,8 +161,8 @@ func (b *BadgerStore) Set(k []byte, v []byte) error {
 func (b *BadgerStore) Get(k []byte) ([]byte, error) {
 	tx := b.conn.NewTransaction(false)
 	defer tx.Discard()
-
-	item, err := tx.Get(k)
+	prefix := dbConf
+	item, err := tx.Get(append(prefix[:], k...))
 
 	if err == badger.ErrKeyNotFound {
 		return nil, ErrKeyNotFound
