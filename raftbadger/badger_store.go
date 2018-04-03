@@ -53,7 +53,7 @@ func (b *BadgerStore) FirstIndex() (uint64, error) {
 	it := tx.NewIterator(opts)
 	defer it.Close()
 	prefix := dbLogs
-	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+	for it.Seek(append(prefix, MIN_LOG_KEY...)); it.ValidForPrefix(prefix); it.Next() {
 		item := it.Item()
 		k := item.Key()
 		return bytesToUint64(k[len(prefix):]), nil
@@ -70,7 +70,7 @@ func (b *BadgerStore) LastIndex() (uint64, error) {
 	it := tx.NewIterator(opts)
 	defer it.Close()
 	prefix := dbLogs
-	for it.Rewind(); it.ValidForPrefix(prefix); it.Next() {
+	for it.Seek(append(prefix[:], MAX_LOG_KEY...)); it.ValidForPrefix(prefix); it.Next() {
 		item := it.Item()
 		k := item.Key()
 		return bytesToUint64(k[len(prefix):]), nil
