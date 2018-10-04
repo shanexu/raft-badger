@@ -15,6 +15,7 @@ var (
 
 type BadgerStore struct {
 	conn     *badger.DB
+	path     string
 	dir      string
 	valueDir string
 }
@@ -42,6 +43,7 @@ func New(opts badger.Options) (*BadgerStore, error) {
 		conn:     db,
 		dir:      opts.Dir,
 		valueDir: opts.ValueDir,
+		path:     opts.Dir,
 	}, nil
 }
 
