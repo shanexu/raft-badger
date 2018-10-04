@@ -16,8 +16,6 @@ var (
 type BadgerStore struct {
 	conn     *badger.DB
 	path     string
-	dir      string
-	valueDir string
 }
 
 func NewBadgerStore(path string) (*BadgerStore, error) {
@@ -41,8 +39,6 @@ func New(opts badger.Options) (*BadgerStore, error) {
 	}
 	return &BadgerStore{
 		conn:     db,
-		dir:      opts.Dir,
-		valueDir: opts.ValueDir,
 		path:     opts.Dir,
 	}, nil
 }
